@@ -4,23 +4,25 @@ from datetime import datetime
 import os
 
 class Database:
-    def __init__(self, db_path="db/construction_company.db"):
+    def __init__(self, db_path="architecture.db"):
         self.db_path = db_path
         self.init_db()
     
     def init_db(self):
         """Инициализация базы данных с нужными таблицами"""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        if os.path.dirname(self.db_path):
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Таблица пользователей
+        # Таблица пользователей - ТОЛЬКО логин, пароль и флаг админа
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Users (
                 user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_name TEXT NOT NULL,
-                user_surname TEXT NOT NULL,
-                user_password TEXT NOT NULL,
+                username TEXT UNIQUE NOT NULL,      -- Уникальный логин
+                full_name TEXT NOT NULL,            -- Полное имя для отображения
+                password TEXT NOT NULL,
                 is_admin INTEGER DEFAULT 0
             )
         ''')
@@ -87,13 +89,13 @@ class Database:
         ''')
         
         # Создаем администратора по умолчанию если нет пользователей
-        cursor.execute("SELECT COUNT(*) FROM Users")
+        cursor.execute("SELECT COUNT(*) FROM Users WHERE username='admin'")
         if cursor.fetchone()[0] == 0:
             cursor.execute('''
-                INSERT INTO Users (user_name, user_surname, user_password, is_admin)
+                INSERT INTO Users (username, full_name, password, is_admin)
                 VALUES (?, ?, ?, ?)
-            ''', ('admin', 'admin', 'admin123', 1))
-            print("Создан администратор: admin/admin123")
+            ''', ('admin', 'Администратор', '1679', 1))
+            print("Создан администратор: admin/1679")
         
         conn.commit()
         conn.close()
@@ -104,28 +106,28 @@ class Database:
         conn.row_factory = sqlite3.Row
         return conn
     
-    # Аутентификация
+    # Аутентификация - только по username
     def authenticate_user(self, username, password):
-        """Аутентификация пользователя"""
+        """Аутентификация пользователя по логину"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         cursor.execute('''
-            SELECT user_id, user_name, user_surname, is_admin
+            SELECT user_id, username, full_name, is_admin
             FROM Users 
-            WHERE user_name = ? AND user_password = ?
+            WHERE username = ? AND password = ?
         ''', (username, password))
-        
         user = cursor.fetchone()
         conn.close()
-        
-        if user:
-            return {
-                'user_id': user['user_id'],
-                'name': f"{user['user_name']} {user['user_surname']}",
-                'is_admin': bool(user['is_admin'])
-            }
-        return None
+        return dict(user) if user else None
+    
+    def get_user_by_id(self, user_id):
+        """Получить пользователя по ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM Users WHERE user_id = ?', (user_id,))
+        user = cursor.fetchone()
+        conn.close()
+        return dict(user) if user else None
     
     # Проекты
     def get_all_projects(self):
@@ -160,7 +162,7 @@ class Database:
         conn = self.get_connection()
         query = """
             SELECT s.*, 
-                   GROUP_CONCAT(u.user_name || ' ' || u.user_surname) as assigned_users
+                   GROUP_CONCAT(u.full_name) as assigned_users
             FROM Stages s
             LEFT JOIN Stage_Users su ON s.stage_id = su.stage_id
             LEFT JOIN Users u ON su.user_id = u.user_id
@@ -197,9 +199,21 @@ class Database:
             conn.commit()
             return True
         except sqlite3.IntegrityError:
-            return False  # Уже назначен
+            return False
         finally:
             conn.close()
+    
+    def remove_user_from_stage(self, stage_id, user_id):
+        """Удалить пользователя из этапа"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM Stage_Users 
+            WHERE stage_id = ? AND user_id = ?
+        ''', (stage_id, user_id))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
     
     # Задачи
     def get_stage_tasks(self, stage_id):
@@ -207,11 +221,13 @@ class Database:
         conn = self.get_connection()
         query = """
             SELECT t.*, 
-                   u.user_name || ' ' || u.user_surname as assigned_user_name
+                   u.full_name as assigned_user_name
             FROM Tasks t
             LEFT JOIN Users u ON t.user_id = u.user_id
             WHERE t.stage_id = ?
-            ORDER BY t.date_end
+            ORDER BY 
+                CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
+                t.date_end
         """
         df = pd.read_sql_query(query, conn, params=(stage_id,))
         conn.close()
@@ -221,15 +237,12 @@ class Database:
         """Создать задачу"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         if date_start is None:
             date_start = datetime.now().strftime('%Y-%m-%d')
-        
         cursor.execute('''
             INSERT INTO Tasks (stage_id, user_id, task_name, date_start, date_end)
             VALUES (?, ?, ?, ?, ?)
         ''', (stage_id, user_id, task_name, date_start, date_end))
-        
         task_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -243,48 +256,90 @@ class Database:
         conn.commit()
         conn.close()
     
+    def add_comment_to_task(self, task_id, user_id, comment_text):
+        """Добавить комментарий к задаче"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO Task_Comments (task_id, user_id, comment_text)
+            VALUES (?, ?, ?)
+        ''', (task_id, user_id, comment_text))
+        conn.commit()
+        conn.close()
+    
     # Пользователи
     def get_all_users(self):
         """Получить всех пользователей"""
         conn = self.get_connection()
         query = """
-            SELECT user_id, 
-                   user_name || ' ' || user_surname as full_name,
-                   is_admin
+            SELECT user_id, username, full_name, is_admin
             FROM Users
-            ORDER BY user_surname
+            ORDER BY full_name
         """
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df
     
-    def create_user(self, user_name, user_surname, password, is_admin=False):
+    def create_user(self, username, full_name, password, is_admin=False):
         """Создать нового пользователя"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO Users (user_name, user_surname, user_password, is_admin)
+            INSERT INTO Users (username, full_name, password, is_admin)
             VALUES (?, ?, ?, ?)
-        ''', (user_name, user_surname, password, 1 if is_admin else 0))
+        ''', (username, full_name, password, 1 if is_admin else 0))
         user_id = cursor.lastrowid
         conn.commit()
         conn.close()
         return user_id
     
-    # Аналитика
-    def get_project_progress(self, project_id):
-        """Получить прогресс по проекту"""
+    def update_user(self, user_id, username, full_name, is_admin=False):
+        """Обновить данные пользователя"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE Users 
+            SET username = ?, full_name = ?, is_admin = ?
+            WHERE user_id = ?
+        ''', (username, full_name, 1 if is_admin else 0, user_id))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+    
+    def delete_user(self, user_id):
+        """Удалить пользователя"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Users WHERE user_id = ? AND username != 'admin'", (user_id,))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+    
+    # Вспомогательные функции
+    def get_stage_details(self, stage_id):
+        """Получить информацию об этапе"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT s.*, p.project_name
+            FROM Stages s
+            JOIN Projects p ON s.project_id = p.project_id
+            WHERE s.stage_id = ?
+        ''', (stage_id,))
+        stage = cursor.fetchone()
+        conn.close()
+        return dict(stage) if stage else None
+    
+    def get_task_comments(self, task_id):
+        """Получить комментарии к задаче"""
         conn = self.get_connection()
         query = """
-            SELECT 
-                s.stage_name,
-                COUNT(t.task_id) as total_tasks,
-                SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
-            FROM Stages s
-            LEFT JOIN Tasks t ON s.stage_id = t.stage_id
-            WHERE s.project_id = ?
-            GROUP BY s.stage_id
+            SELECT c.*, u.full_name as author_name
+            FROM Task_Comments c
+            JOIN Users u ON c.user_id = u.user_id
+            WHERE c.task_id = ?
+            ORDER BY c.created_at DESC
         """
-        df = pd.read_sql_query(query, conn, params=(project_id,))
+        df = pd.read_sql_query(query, conn, params=(task_id,))
         conn.close()
         return df

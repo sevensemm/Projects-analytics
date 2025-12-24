@@ -1,4 +1,22 @@
-# Python
+# Базы данных
+*.db
+*.sqlite3
+*.db-journal
+
+# Временные файлы
+*.tmp
+*.temp
+*.log
+
+# Виртуальное окружение
+venv/
+.env/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Кэш Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,37 +36,35 @@ svelte/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
-env.bak/
-
-# IDE
+# IDE файлы
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Database
-*.db
-*.sqlite3
-*.db-journal
+*~
 
 # Streamlit
 .streamlit/secrets.toml
 
-# OS
+# Системные файлы
 .DS_Store
 Thumbs.db
 
-# Logs
+# Логи
 *.log
+logs/
 
-# Temp files
-*.tmp
-*.temp
+# Конфигурационные файлы с паролями
+config.py
+secrets.py
+credentials.json
 
-# Environment variables
-.env
-.env.local
+# Документация
+docs/_build/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Тестовые данные
+test_data/
+test.db
