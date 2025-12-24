@@ -9,20 +9,14 @@ db = Database()
 
 st.title("Мои проекты")
 
-# Проверяем есть ли у нас функция get_user_projects_with_admin
 try:
-    # Пробуем использовать новую функцию если она есть
     if st.session_state.get('is_admin'):
-        # Админ видит все проекты
         projects_df = db.get_all_projects()
     else:
-        # Обычный пользователь видит только проекты со своими задачами
         projects_df = db.get_user_projects(st.session_state['user_id'])
 except:
-    # Если функция не найдена, создадим её в database.py
     st.info("Настройка отображения проектов...")
     
-    # Показываем тестовый проект для проверки
     projects_df = db.get_all_projects() if st.session_state.get('is_admin') else None
     
     if projects_df is None or projects_df.empty:
@@ -45,9 +39,8 @@ else:
         
         with col2:
             if st.button("Открыть", key=f"open_{project['project_id']}"):
-                # Сохраняем проект в session_state
                 st.session_state['selected_project'] = project['project_id']
                 st.session_state['selected_project_name'] = project['project_name']
-                st.switch_page("pages/_05_project_details.py")
+                st.switch_page("pages/__project_details.py")
         
         st.markdown("---")

@@ -73,10 +73,10 @@ else:
         # Меню навигации - только основные страницы
         st.write("**Основное меню**")
         
-        if st.button("📁 Мои проекты", use_container_width=True):
+        if st.button("Проекты", use_container_width=True):
             st.switch_page("pages/01_projects.py")
         
-        if st.button("✅ Мои задачи", use_container_width=True):
+        if st.button("Задачи", use_container_width=True):
             st.switch_page("pages/02_tasks.py")
         
         # Админские страницы показываем только админу
@@ -84,19 +84,16 @@ else:
             st.markdown("---")
             st.write("**Администрирование**")
             
-            if st.button("🏗️ Управление проектами", use_container_width=True):
-                st.switch_page("pages/03_admin_projects.py")
+            if st.button("Управление проектами", use_container_width=True):
+                st.switch_page("pages/__admin_projects.py")
             
-            if st.button("👥 Управление пользователями", use_container_width=True):
-                st.switch_page("pages/04_admin_users.py")
-            
-            if st.button("⚙️ Настройки видимости", use_container_width=True):
-                st.switch_page("pages/05_admin_visibility.py")
+            if st.button("Управление пользователями", use_container_width=True):
+                st.switch_page("pages/__admin_users.py")
         
         st.markdown("---")
         
         # Кнопка выхода
-        if st.button("🚪 Выйти из аккаунта", type="secondary", use_container_width=True):
+        if st.button("Выйти из аккаунта", type="secondary", use_container_width=True):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.session_state['authenticated'] = False
@@ -109,18 +106,15 @@ else:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Количество проектов пользователя
         projects = db.get_user_projects(st.session_state['user_id'])
         st.metric("Мои проекты", len(projects))
     
     with col2:
-        # Количество активных задач
         tasks = db.get_user_tasks(st.session_state['user_id'])
         active_tasks = tasks[tasks['status'] != 'completed']
         st.metric("Активные задачи", len(active_tasks))
     
     with col3:
-        # Выполненные задачи
         completed_tasks = tasks[tasks['status'] == 'completed']
         st.metric("Выполнено задач", len(completed_tasks))
     
@@ -140,7 +134,7 @@ else:
     with action_col2:
         if st.session_state['is_admin']:
             if st.button("Создать новый проект", use_container_width=True):
-                st.switch_page("pages/03_admin_projects.py")
+                st.switch_page("pages/__admin_projects.py")
             
             if st.button("Добавить пользователя", use_container_width=True):
-                st.switch_page("pages/04_admin_users.py")
+                st.switch_page("pages/__admin_users.py")

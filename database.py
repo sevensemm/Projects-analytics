@@ -41,7 +41,6 @@ class Database:
                 stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_id INTEGER NOT NULL,
                 stage_name TEXT NOT NULL,
-                is_visible INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (project_id) REFERENCES Projects(project_id) ON DELETE CASCADE
             )
@@ -55,7 +54,6 @@ class Database:
                 user_id INTEGER NOT NULL,
                 task_name TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
-                is_visible INTEGER DEFAULT 1,
                 date_start DATE,
                 date_end DATE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -115,8 +113,6 @@ class Database:
             JOIN Stages s ON p.project_id = s.project_id
             JOIN Tasks t ON s.stage_id = t.stage_id
             WHERE t.user_id = ? 
-            AND t.is_visible = 1
-            AND s.is_visible = 1
             ORDER BY p.created_at DESC
         """
         df = pd.read_sql_query(query, conn, params=(user_id,))
@@ -147,14 +143,10 @@ class Database:
         conn.close()
     
     # Этапы
-    def get_project_stages(self, project_id, user_is_admin=False):
+    def get_project_stages(self, project_id):
         conn = self.get_connection()
-        if user_is_admin:
-            query = "SELECT * FROM Stages WHERE project_id = ? ORDER BY created_at"
-            df = pd.read_sql_query(query, conn, params=(project_id,))
-        else:
-            query = "SELECT * FROM Stages WHERE project_id = ? AND is_visible = 1 ORDER BY created_at"
-            df = pd.read_sql_query(query, conn, params=(project_id,))
+        query = "SELECT * FROM Stages WHERE project_id = ? ORDER BY created_at"
+        df = pd.read_sql_query(query, conn, params=(project_id,))
         conn.close()
         return df
     
@@ -187,7 +179,6 @@ class Database:
                 JOIN Users u ON t.user_id = u.user_id
                 WHERE t.stage_id = ? 
                 AND t.user_id = ?
-                AND t.is_visible = 1
                 ORDER BY 
                     CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
                     t.date_end
@@ -199,7 +190,6 @@ class Database:
                 FROM Tasks t
                 JOIN Users u ON t.user_id = u.user_id
                 WHERE t.stage_id = ?
-                AND t.is_visible = 1
                 ORDER BY 
                     CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
                     t.date_end
@@ -235,8 +225,6 @@ class Database:
             JOIN Projects p ON s.project_id = p.project_id
             JOIN Users u ON t.user_id = u.user_id
             WHERE t.user_id = ?
-            AND t.is_visible = 1
-            AND s.is_visible = 1
             ORDER BY 
                 CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
                 t.date_end
@@ -316,19 +304,34 @@ class Database:
         conn.commit()
         conn.close()
     
-    # Видимость
-    def update_stage_visibility(self, stage_id, is_visible):
+    def get_task_comments(self, task_id):
+        """Получить все комментарии к задаче"""
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE Stages SET is_visible = ? WHERE stage_id = ?", 
-                      (1 if is_visible else 0, stage_id))
-        conn.commit()
+        query = """
+            SELECT 
+                tc.comment_id,
+                tc.comment_text,
+                tc.created_at,
+                u.full_name as author_name,
+                u.user_id
+            FROM Task_Comments tc
+            JOIN Users u ON tc.user_id = u.user_id
+            WHERE tc.task_id = ?
+            ORDER BY tc.created_at DESC
+        """
+        df = pd.read_sql_query(query, conn, params=(task_id,))
         conn.close()
+        return df
     
-    def update_task_visibility(self, task_id, is_visible):
+    def delete_comment(self, comment_id, user_id):
+        """Удалить комментарий (только свой)"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE Tasks SET is_visible = ? WHERE task_id = ?", 
-                      (1 if is_visible else 0, task_id))
+        cursor.execute('''
+            DELETE FROM Task_Comments 
+            WHERE comment_id = ? AND user_id = ?
+        ''', (comment_id, user_id))
+        deleted = cursor.rowcount > 0
         conn.commit()
         conn.close()
+        return deleted

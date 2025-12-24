@@ -13,7 +13,6 @@ db = Database()
 
 st.title("Администрирование: Пользователи")
 
-# Создание пользователя
 st.subheader("Создать пользователя")
 with st.form("create_user_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
@@ -28,7 +27,6 @@ with st.form("create_user_form", clear_on_submit=True):
     
     if st.form_submit_button("Создать пользователя"):
         if login and full_name and password:
-            # Проверка уникальности логина
             all_users = db.get_all_users()
             existing_logins = [u['login'] for _, u in all_users.iterrows()]
             
@@ -44,7 +42,6 @@ with st.form("create_user_form", clear_on_submit=True):
 
 st.markdown("---")
 
-# Список пользователей с кнопками редактирования
 st.subheader("Все пользователи")
 
 users_df = db.get_all_users()
@@ -67,7 +64,6 @@ else:
             st.caption(f"ID: {user['user_id']}")
         
         with col3:
-            # Кнопка редактирования
             if st.button("✏️ Изменить", key=f"edit_{user['user_id']}"):
                 st.session_state['editing_user_id'] = user['user_id']
                 st.session_state['editing_user_login'] = user['login']
@@ -76,7 +72,6 @@ else:
                 st.rerun()
         
         with col4:
-            # Кнопка удаления
             if user['login'] != 'admin':
                 if st.button("🗑️ Удалить", key=f"delete_{user['user_id']}"):
                     success = db.delete_user(user['user_id'])
@@ -90,7 +85,6 @@ else:
         
         st.markdown("---")
     
-    # Форма редактирования (показывается после нажатия "Изменить")
     if 'editing_user_id' in st.session_state and st.session_state['editing_user_id']:
         st.markdown("---")
         st.subheader(f"Редактирование пользователя")
@@ -115,7 +109,6 @@ else:
             with col_save:
                 if st.form_submit_button("💾 Сохранить изменения"):
                     if edit_login and edit_full_name:
-                        # Проверяем уникальность логина (кроме текущего пользователя)
                         all_users = db.get_all_users()
                         other_users = [u for _, u in all_users.iterrows() 
                                      if u['user_id'] != st.session_state['editing_user_id']]
@@ -124,12 +117,10 @@ else:
                         if edit_login in existing_logins:
                             st.error(f"Логин '{edit_login}' уже занят другим пользователем")
                         else:
-                            # Обновляем пользователя в базе данных
                             conn = db.get_connection()
                             cursor = conn.cursor()
                             
                             if edit_password:
-                                # Обновляем с паролем
                                 cursor.execute('''
                                     UPDATE Users 
                                     SET login = ?, full_name = ?, password = ?, is_admin = ?
@@ -138,7 +129,6 @@ else:
                                       1 if edit_is_admin else 0, 
                                       st.session_state['editing_user_id']))
                             else:
-                                # Обновляем без пароля
                                 cursor.execute('''
                                     UPDATE Users 
                                     SET login = ?, full_name = ?, is_admin = ?
@@ -152,7 +142,6 @@ else:
                             
                             st.success(f"Данные пользователя обновлены")
                             
-                            # Очищаем состояние редактирования
                             del st.session_state['editing_user_id']
                             del st.session_state['editing_user_login']
                             del st.session_state['editing_user_full_name']
@@ -164,7 +153,6 @@ else:
             
             with col_cancel:
                 if st.form_submit_button("❌ Отмена"):
-                    # Очищаем состояние редактирования
                     del st.session_state['editing_user_id']
                     del st.session_state['editing_user_login']
                     del st.session_state['editing_user_full_name']

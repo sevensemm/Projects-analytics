@@ -13,7 +13,6 @@ db = Database()
 
 st.title("Администрирование: Проекты и этапы")
 
-# Создание проекта
 st.subheader("Создать проект")
 with st.form("create_project_form", clear_on_submit=True):
     project_name = st.text_input("Название проекта")
@@ -28,7 +27,6 @@ with st.form("create_project_form", clear_on_submit=True):
 
 st.markdown("---")
 
-# Управление проектами
 st.subheader("Управление проектами")
 
 projects_df = db.get_all_projects()
@@ -52,7 +50,6 @@ else:
             
             st.markdown("---")
             
-            # Создание этапа для этого проекта
             st.write("**Добавить этап**")
             with st.form(f"create_stage_form_{project['project_id']}", clear_on_submit=True):
                 stage_name = st.text_input("Название этапа", key=f"stage_name_{project['project_id']}")
@@ -67,7 +64,6 @@ else:
             
             st.markdown("---")
             
-            # Список этапов проекта
             stages_df = db.get_project_stages(project['project_id'])
             
             if not stages_df.empty:
