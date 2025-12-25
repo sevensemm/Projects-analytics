@@ -165,10 +165,34 @@ if stages_df.empty:
 else:
     for _, stage in stages_df.iterrows():
         with st.expander(f"📋 Этап: {stage['stage_name']}", expanded=False):
+            # Блок для администратора: настройка стоимости этапа и создание задач
             if st.session_state.get('is_admin'):
+                # Настройка стоимости этапа
+                st.write("**Настройка стоимости этапа:**")
+                current_cost = stage.get('stage_cost', 0)
+                
+                col_cost1, col_cost2 = st.columns([3, 1])
+                with col_cost1:
+                    new_cost = st.number_input(
+                        "Стоимость этапа (руб.):",
+                        min_value=0.0,
+                        value=float(current_cost),
+                        step=1000.0,
+                        key=f"stage_cost_{stage['stage_id']}"
+                    )
+                with col_cost2:
+                    if st.button("💾 Обновить", key=f"update_cost_{stage['stage_id']}"):
+                        db.update_stage_cost(stage['stage_id'], new_cost)
+                        st.success(f"Стоимость этапа обновлена: {new_cost} руб.")
+                        st.rerun()
+                
+                st.markdown("---")
+                
+                # Создание задачи
                 create_task_form(stage['stage_id'])
                 st.markdown("---")
             
+            # Получаем задачи этапа
             if st.session_state.get('is_admin'):
                 tasks_df = db.get_all_stage_tasks(stage['stage_id'])
             else:
@@ -180,12 +204,14 @@ else:
                 completed_tasks = tasks_df[tasks_df['status'] == 'completed']
                 active_tasks = tasks_df[tasks_df['status'] != 'completed']
                 
+                # Активные задачи
                 if not active_tasks.empty:
                     st.write("**Активные задачи:**")
                     for _, task in active_tasks.iterrows():
                         display_task_in_stage(task)
                         st.markdown("---")
                 
+                # Архив выполненных задач
                 if not completed_tasks.empty:
                     with st.expander(f"📁 Архив выполненных задач ({len(completed_tasks)})", expanded=False):
                         for _, task in completed_tasks.iterrows():
