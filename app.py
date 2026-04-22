@@ -2,7 +2,7 @@ import streamlit as st
 from database import Database
 
 st.set_page_config(
-    page_title="Архитектурная компания - Личный кабинет",
+    page_title="Личный кабинет",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
@@ -24,7 +24,7 @@ if 'authenticated' not in st.session_state:
     st.session_state['is_admin'] = False
 
 def login_page():
-    st.title("Архитектурная компания")
+    st.title("Добро пожаловать")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     

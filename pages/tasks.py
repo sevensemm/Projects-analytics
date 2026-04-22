@@ -97,12 +97,12 @@ def display_task(task, is_completed=False):
                 if task.get('planned_hours'):
                     st.info(f"Плановые часы: **{task['planned_hours']} ч**")
                 
-                # ИСПРАВЛЕНА ОШИБКА: все типы должны быть float
+                # 
                 actual_hours = st.number_input(
                     "Фактически затраченные часы:",
-                    min_value=0.0,  # исправлено с 0
-                    max_value=200.0,  # исправлено с 200
-                    value=float(task.get('planned_hours', 4.0)),  # исправлено - приведение к float
+                    min_value=0.0,  # 
+                    max_value=200.0,  # 
+                    value=float(task.get('planned_hours', 4.0)),  
                     step=0.5,
                     help="Укажите реальное количество часов, потраченных на задачу",
                     key=f"actual_hours_{task['task_id']}"

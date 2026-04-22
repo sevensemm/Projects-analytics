@@ -61,7 +61,7 @@ def display_stage_tasks(stage_id, stage_name):
 def display_task_item(task, is_completed=False):
     """Отображение одной задачи с кнопкой удаления"""
     with st.container():
-        cols = st.columns([3, 2, 2, 1, 1])  # Добавлен столбец для удаления
+        cols = st.columns([3, 2, 2, 1, 1])  
         
         with cols[0]:
             status_icon = "✅" if task['status'] == 'completed' else "⏳"
