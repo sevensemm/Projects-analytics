@@ -40,8 +40,6 @@ with st.form("create_user_form", clear_on_submit=True):
         else:
             st.error("Заполните все поля")
 
-st.markdown("---")
-
 st.subheader("Все пользователи")
 
 users_df = db.get_all_users()
@@ -82,11 +80,8 @@ else:
                         st.error("Ошибка при удалении")
             else:
                 st.button("🗑️ Удалить", disabled=True, key=f"disabled_{user['user_id']}")
-        
-        st.markdown("---")
     
     if 'editing_user_id' in st.session_state and st.session_state['editing_user_id']:
-        st.markdown("---")
         st.subheader(f"Редактирование пользователя")
         
         with st.form("edit_user_form"):

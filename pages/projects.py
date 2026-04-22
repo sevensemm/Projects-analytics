@@ -41,6 +41,4 @@ else:
             if st.button("Открыть", key=f"open_{project['project_id']}"):
                 st.session_state['selected_project'] = project['project_id']
                 st.session_state['selected_project_name'] = project['project_name']
-                st.switch_page("pages/__project_details.py")
-        
-        st.markdown("---")
+                st.switch_page("pages/project_details.py")

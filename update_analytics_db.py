@@ -6,18 +6,16 @@ def update_database_for_analytics():
     conn = sqlite3.connect('architecture.db')
     cursor = conn.cursor()
     
-    print("Начинаю обновление базы данных для аналитики...")
-    
     try:
-        # 1. Добавляем stage_cost в таблицу Stages
+        # Добавляем stage_cost в таблицу Stages
         cursor.execute("PRAGMA table_info(Stages)")
         stages_columns = [col[1] for col in cursor.fetchall()]
         
         if 'stage_cost' not in stages_columns:
             cursor.execute('ALTER TABLE Stages ADD COLUMN stage_cost DECIMAL(10,2) DEFAULT 0')
-            print("✓ Добавлен столбец stage_cost в таблицу Stages")
+            print("Добавлен столбец stage_cost в таблицу Stages")
         
-        # 2. Добавляем новые поля в таблицу Tasks
+        # Добавляем новые задачи
         cursor.execute("PRAGMA table_info(Tasks)")
         tasks_columns = [col[1] for col in cursor.fetchall()]
         
@@ -32,7 +30,7 @@ def update_database_for_analytics():
                 cursor.execute(f'ALTER TABLE Tasks ADD COLUMN {column_name} {column_type}')
                 print(f"✓ Добавлен столбец {column_name} в таблицу Tasks")
         
-        # 3. Создаем таблицу Salaries если её нет
+        # Создаем таблицу Salaries если её нет
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Salaries (
                 salary_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,9 +43,9 @@ def update_database_for_analytics():
                 UNIQUE(user_id, month)
             )
         ''')
-        print("✓ Проверена/создана таблица Salaries")
+        print("Cоздана таблица Salaries")
         
-        # 4. Обновляем существующие задачи с расчетом planned_hours
+        # Обновляем существующие задачи 
         cursor.execute('''
             UPDATE Tasks 
             SET planned_hours = 
@@ -60,18 +58,15 @@ def update_database_for_analytics():
         ''')
         
         updated = cursor.rowcount
-        print(f"✓ Обновлено planned_hours для {updated} задач")
         
         conn.commit()
-        print("\n✅ База данных успешно обновлена для аналитики!")
+        print("\nБаза данных успешно обновлена")
         
     except Exception as e:
-        print(f"❌ Ошибка при обновлении базы данных: {e}")
+        print(f"Ошибка при обновлении базы данных: {e}")
         conn.rollback()
     finally:
         conn.close()
 
 if __name__ == "__main__":
     update_database_for_analytics()
-    print("\nЗапустите скрипт миграции:")
-    print("python update_analytics_db.py")

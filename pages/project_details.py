@@ -20,7 +20,6 @@ def display_comments_in_project(task_id):
     comments_df = db.get_task_comments(task_id)
     
     if not comments_df.empty:
-        st.markdown("---")
         st.write("**Комментарии:**")
         
         for _, comment in comments_df.iterrows():
@@ -38,8 +37,60 @@ def display_comments_in_project(task_id):
                             if db.delete_comment(comment['comment_id'], st.session_state['user_id']):
                                 st.success("Комментарий удален")
                                 st.rerun()
-                
-                st.markdown("---")
+
+def display_stage_tasks(stage_id, stage_name):
+    """Отображение задач этапа с возможностью удаления для админа"""
+    tasks_df = db.get_all_stage_tasks(stage_id)
+    
+    if not tasks_df.empty:
+        completed_tasks = tasks_df[tasks_df['status'] == 'completed']
+        active_tasks = tasks_df[tasks_df['status'] != 'completed']
+        
+        # Активные задачи
+        if not active_tasks.empty:
+            st.write("**Активные задачи:**")
+            for _, task in active_tasks.iterrows():
+                display_task_item(task, is_completed=False)
+        
+        # Архив выполненных задач
+        if not completed_tasks.empty:
+            with st.expander(f"📁 Архив выполненных задач ({len(completed_tasks)})", expanded=False):
+                for _, task in completed_tasks.iterrows():
+                    display_task_item(task, is_completed=True)
+
+def display_task_item(task, is_completed=False):
+    """Отображение одной задачи с кнопкой удаления"""
+    with st.container():
+        cols = st.columns([3, 2, 2, 1, 1])  # Добавлен столбец для удаления
+        
+        with cols[0]:
+            status_icon = "✅" if task['status'] == 'completed' else "⏳"
+            st.write(f"{status_icon} **{task['task_name']}**")
+            st.caption(f"Ответственный: {task['responsible_name']}")
+        
+        with cols[1]:
+            if task['date_end']:
+                st.write(f"До: {task['date_end']}")
+        
+        with cols[2]:
+            hours_text = f"{task.get('planned_hours', 0)} ч"
+            if task['status'] == 'completed' and task.get('actual_hours'):
+                hours_text += f" / {task['actual_hours']} ч (факт)"
+            st.write(f"⏱️ {hours_text}")
+        
+        with cols[3]:
+            status_text = "Завершена" if task['status'] == 'completed' else "В работе"
+            st.write(status_text)
+        
+        # Кнопка удаление задач (только для админа)
+        with cols[4]:
+            if st.session_state.get('is_admin'):
+                if st.button("🗑️", key=f"delete_task_{task['task_id']}", help="Удалить задачу"):
+                    # Подтверждение удаления
+                    if st.warning(f"Удалить задачу '{task['task_name']}'?"):
+                        db.delete_task(task['task_id'])
+                        st.success(f"Задача '{task['task_name']}' удалена")
+                        st.rerun()
 
 def display_task_in_stage(task, is_completed=False):
     col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
@@ -118,7 +169,7 @@ def display_task_in_stage(task, is_completed=False):
 
 def complete_task_in_stage(task):
     if task['user_id'] == st.session_state['user_id']:
-        db.update_task_status(task['task_id'], 'completed')
+        db.complete_task(task['task_id'])
         st.rerun()
     else:
         st.error("Вы не можете отмечать чужие задачи")
@@ -153,8 +204,6 @@ if st.button("← Назад к проектам"):
         del st.session_state['selected_project_name']
     st.switch_page("pages/01_projects.py")
 
-st.markdown("---")
-
 stages_df = db.get_project_stages(project_id)
 
 if stages_df.empty:
@@ -186,36 +235,8 @@ else:
                         st.success(f"Стоимость этапа обновлена: {new_cost} руб.")
                         st.rerun()
                 
-                st.markdown("---")
-                
                 # Создание задачи
                 create_task_form(stage['stage_id'])
-                st.markdown("---")
             
-            # Получаем задачи этапа
-            if st.session_state.get('is_admin'):
-                tasks_df = db.get_all_stage_tasks(stage['stage_id'])
-            else:
-                tasks_df = db.get_stage_tasks(stage['stage_id'], current_user_id=st.session_state['user_id'])
-            
-            if tasks_df.empty:
-                st.info("В этапе нет задач")
-            else:
-                completed_tasks = tasks_df[tasks_df['status'] == 'completed']
-                active_tasks = tasks_df[tasks_df['status'] != 'completed']
-                
-                # Активные задачи
-                if not active_tasks.empty:
-                    st.write("**Активные задачи:**")
-                    for _, task in active_tasks.iterrows():
-                        display_task_in_stage(task)
-                        st.markdown("---")
-                
-                # Архив выполненных задач
-                if not completed_tasks.empty:
-                    with st.expander(f"📁 Архив выполненных задач ({len(completed_tasks)})", expanded=False):
-                        for _, task in completed_tasks.iterrows():
-                            display_task_in_stage(task, is_completed=True)
-                            st.markdown("---")
-        
-        st.markdown("---")
+            # Отображение задач
+            display_stage_tasks(stage['stage_id'], stage['stage_name'])

@@ -56,8 +56,6 @@ with st.sidebar:
                     st.session_state.analytics_filters['selected_stage_id'] = None
                     st.rerun()
     
-    st.markdown("---")
-    
     # Если проект выбран, показываем детальные фильтры
     if st.session_state.analytics_filters['selected_project']:
         st.write(f"**Выбран проект:** {st.session_state.analytics_filters['selected_project']}")
@@ -103,7 +101,6 @@ with st.sidebar:
                 st.rerun()
     
     # Период анализа
-    st.markdown("---")
     st.subheader("Период анализа")
     
     col1, col2 = st.columns(2)
@@ -493,156 +490,79 @@ else:
             st.info("📝 В проекте нет данных для анализа")
     
     # ВКЛАДКА 3: Отклонения от плана
+    # ВКЛАДКА 3: Отклонения от плана (обновленная)
     with tab3:
-        project_analytics = db.get_project_analytics(project_id)
+        if st.session_state.analytics_filters['selected_project_id']:
+            deviations_df = db.get_project_deviations(st.session_state.analytics_filters['selected_project_id'])
         
-        if not project_analytics.empty:
-            # Фильтруем этапы с данными
-            filtered_df = project_analytics[
-                (project_analytics['total_planned_hours'] > 0) | 
-                (project_analytics['total_actual_hours'] > 0)
-            ].copy()
-            
-            if not filtered_df.empty:
-                # Рассчитываем отклонения
-                filtered_df['deviation_hours'] = filtered_df['total_actual_hours'] - filtered_df['total_planned_hours']
+            if not deviations_df.empty:
+                # 1. Таблица отклонений по датам
+                st.subheader("Отклонения по датам выполнения")
                 
-                # Исправляем деление на ноль
-                filtered_df['deviation_percent'] = filtered_df.apply(
-                    lambda row: (row['deviation_hours'] / row['total_planned_hours'] * 100) 
-                    if row['total_planned_hours'] > 0 else 0,
+                # Рассчитываем отклонение в днях
+                deviations_df['deviation_days'] = deviations_df.apply(
+                    lambda row: (
+                        (datetime.strptime(row['actual_end_date'], '%Y-%m-%d').date() - 
+                        datetime.strptime(row['planned_end_date'], '%Y-%m-%d').date()).days
+                        if row['actual_end_date'] and row['planned_end_date'] else None
+                    ),
                     axis=1
                 )
                 
-                # 1. Waterfall chart отклонений
-                st.subheader("Суммарные отклонения от плана")
-                
-                fig1 = go.Figure(go.Waterfall(
-                    name="Отклонения",
-                    orientation="v",
-                    measure=["relative"] * len(filtered_df),
-                    x=filtered_df['stage_name'],
-                    y=filtered_df['deviation_hours'],
-                    textposition="outside",
-                    text=[f"{d:.1f} ч" for d in filtered_df['deviation_hours']],
-                    connector={"line": {"color": "rgb(63, 63, 63)"}},
-                    increasing={"marker": {"color": "#e74c3c"}},  # красный для опозданий
-                    decreasing={"marker": {"color": "#2ecc71"}},  # зеленый для опережений
-                ))
-                
-                fig1.update_layout(
-                    title="Отклонения от плана по этапам",
-                    showlegend=False,
-                    xaxis_title="Этапы",
-                    yaxis_title="Отклонение (часы)",
-                    hovermode='x',
-                    height=500
-                )
-                
-                st.plotly_chart(fig1, use_container_width=True)
-                
-                # 2. Групповая гистограмма плана и факта
-                st.subheader("План vs Факт по этапам")
-                
-                fig2 = go.Figure()
-                
-                fig2.add_trace(go.Bar(
-                    x=filtered_df['stage_name'],
-                    y=filtered_df['total_planned_hours'],
-                    name='Плановые часы',
-                    marker_color='#3498db',
-                    text=filtered_df['total_planned_hours'].round(1),
-                    textposition='auto'
-                ))
-                
-                fig2.add_trace(go.Bar(
-                    x=filtered_df['stage_name'],
-                    y=filtered_df['total_actual_hours'],
-                    name='Фактические часы',
-                    marker_color='#e74c3c',
-                    text=filtered_df['total_actual_hours'].round(1),
-                    textposition='auto'
-                ))
-                
-                fig2.update_layout(
-                    title='Сравнение плановых и фактических часов',
-                    xaxis_title='Этапы',
-                    yaxis_title='Часы',
-                    barmode='group',
-                    hovermode='x unified',
-                    showlegend=True
-                )
-                
-                st.plotly_chart(fig2, use_container_width=True)
-                
-                # 3. Heatmap отклонений
-                st.subheader("Тепловая карта отклонений")
-                
-                # Создаем матрицу для heatmap
-                filtered_df['deviation_category'] = filtered_df['deviation_hours'].apply(
-                    lambda x: 'Опережение' if x < 0 else ('Задержка' if x > 0 else 'По плану')
-                )
-                
-                category_order = ['Опережение', 'По плану', 'Задержка']
-                filtered_df['deviation_category'] = pd.Categorical(
-                    filtered_df['deviation_category'], 
-                    categories=category_order, 
-                    ordered=True
-                )
-                
-                # Группируем по категориям
-                heatmap_data = filtered_df.groupby('deviation_category').agg({
-                    'stage_name': 'count',
-                    'deviation_hours': 'sum'
-                }).reset_index()
-                
-                fig3 = px.bar(
-                    heatmap_data,
-                    x='deviation_category',
-                    y='stage_name',
-                    color='deviation_hours',
-                    title='Распределение этапов по категориям отклонений',
-                    color_continuous_scale='RdYlGn_r',  # Красный-Желтый-Зеленый (обратный)
-                    labels={'stage_name': 'Количество этапов', 'deviation_category': 'Категория отклонения'}
-                )
-                
-                fig3.update_layout(
-                    xaxis_title="Категория отклонения",
-                    yaxis_title="Количество этапов",
-                    coloraxis_colorbar=dict(title="Суммарное отклонение (ч)")
-                )
-                
-                st.plotly_chart(fig3, use_container_width=True)
-                
                 # Статистика
-                total_deviation = filtered_df['deviation_hours'].sum()
-                avg_deviation = filtered_df['deviation_hours'].mean()
-                ontime_stages = len(filtered_df[filtered_df['deviation_hours'] == 0])
-                ahead_stages = len(filtered_df[filtered_df['deviation_hours'] < 0])
-                behind_stages = len(filtered_df[filtered_df['deviation_hours'] > 0])
+                ontime_tasks = len(deviations_df[deviations_df['deviation_status'] == 'ontime'])
+                delayed_tasks = len(deviations_df[deviations_df['deviation_status'] == 'delayed'])
+                pending_tasks = len(deviations_df[deviations_df['deviation_status'] == 'pending'])
                 
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Суммарное отклонение", f"{total_deviation:.1f} ч")
+                    st.metric("Выполнено вовремя", ontime_tasks)
                 with col2:
-                    st.metric("Среднее отклонение", f"{avg_deviation:.1f} ч")
+                    st.metric("Выполнено с задержкой", delayed_tasks)
                 with col3:
-                    st.metric("Этапов впереди плана", ahead_stages)
-                with col4:
-                    st.metric("Этапов с задержкой", behind_stages)
+                    st.metric("Ожидают выполнения", pending_tasks)
                 
-                # Таблица
-                display_df = filtered_df[['stage_name', 'total_planned_hours', 
-                                        'total_actual_hours', 'deviation_hours', 
-                                        'deviation_percent']].copy()
-                display_df.columns = ['Этап', 'План. часы', 'Факт. часы', 
-                                    'Отклонение (часы)', 'Отклонение %']
-                display_df = display_df.round(1)
+                # 2. Круговая диаграмма статусов
+                status_counts = deviations_df['deviation_status'].value_counts()
+                if not status_counts.empty:
+                    fig1 = px.pie(
+                        values=status_counts.values,
+                        names=status_counts.index,
+                        title='Распределение задач по статусу выполнения',
+                        color=status_counts.index,
+                        color_discrete_map={'ontime': '#2ecc71', 'delayed': '#e74c3c', 'pending': '#f39c12'}
+                    )
+                    st.plotly_chart(fig1, use_container_width=True)
+                
+                # 3. Гистограмма отклонений в днях
+                completed_tasks = deviations_df[deviations_df['deviation_days'].notna()]
+                if not completed_tasks.empty:
+                    fig2 = px.histogram(
+                        completed_tasks,
+                        x='deviation_days',
+                        nbins=20,
+                        title='Распределение отклонений по дням',
+                        labels={'deviation_days': 'Отклонение (дни)', 'count': 'Количество задач'},
+                        color_discrete_sequence=['#3498db']
+                    )
+                    fig2.update_layout(
+                        xaxis_title="Отклонение от плана (дни)",
+                        yaxis_title="Количество задач",
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                # 4. Детальная таблица
+                st.subheader("Детали по задачам")
+                display_df = deviations_df[['task_name', 'responsible_name', 'stage_name', 
+                                        'planned_end_date', 'actual_end_date', 
+                                        'deviation_days', 'deviation_status']].copy()
+                display_df.columns = ['Задача', 'Ответственный', 'Этап', 'План. дата', 
+                                    'Факт. дата', 'Отклонение (дни)', 'Статус']
                 st.dataframe(display_df, use_container_width=True)
+                
             else:
-                st.info("📊 Нет данных о плановых и фактических часах")
-        else:
-            st.info("📝 В проекте нет данных для анализа отклонений")
+                st.info("📝 В проекте нет задач для анализа отклонений")
     
     # ВКЛАДКА 4: Эффективность сотрудников
     with tab4:
@@ -866,7 +786,6 @@ else:
             st.info("📊 Нет данных о производительности сотрудников за выбранный период")
 
 # Информация о данных
-st.markdown("---")
 with st.expander("ℹ️ Информация о расчетах"):
     st.write("""
     **Методика расчетов:**

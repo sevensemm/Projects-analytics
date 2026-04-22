@@ -1,5 +1,5 @@
 import sqlite3
-import pandas as pd
+import pandas as pd 
 from datetime import datetime, date, timedelta
 import os
 
@@ -15,7 +15,7 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Пользователи
+        # Таблицы 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Users (
                 user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,7 +26,6 @@ class Database:
             )
         ''')
         
-        # Проекты
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Projects (
                 project_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,7 +34,6 @@ class Database:
             )
         ''')
         
-        # Этапы
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Stages (
                 stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +45,6 @@ class Database:
             )
         ''')
         
-        # Задачи
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Tasks (
                 task_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +63,6 @@ class Database:
             )
         ''')
         
-        # Комментарии
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Task_Comments (
                 comment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +75,6 @@ class Database:
             )
         ''')
         
-        # Зарплаты
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Salaries (
                 salary_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,16 +108,18 @@ class Database:
     def authenticate_user(self, login, password):
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT user_id, login, full_name, is_admin
-            FROM Users 
-            WHERE login = ? AND password = ?
-        ''', (login, password))
+        cursor.execute('SELECT user_id, login, full_name, is_admin FROM Users WHERE login = ? AND password = ?', (login, password))
         user = cursor.fetchone()
         conn.close()
         return dict(user) if user else None
     
     # Проекты
+    def get_all_projects(self):
+        conn = self.get_connection()
+        df = pd.read_sql_query("SELECT * FROM Projects ORDER BY created_at DESC", conn)
+        conn.close()
+        return df
+    
     def get_user_projects(self, user_id):
         conn = self.get_connection()
         query = """
@@ -134,13 +131,6 @@ class Database:
             ORDER BY p.created_at DESC
         """
         df = pd.read_sql_query(query, conn, params=(user_id,))
-        conn.close()
-        return df
-    
-    def get_all_projects(self):
-        conn = self.get_connection()
-        query = "SELECT * FROM Projects ORDER BY created_at DESC"
-        df = pd.read_sql_query(query, conn)
         conn.close()
         return df
     
@@ -163,21 +153,7 @@ class Database:
     # Этапы
     def get_project_stages(self, project_id):
         conn = self.get_connection()
-        # Дебаг: проверяем что приходит
-        print(f"DEBUG get_project_stages: project_id = {project_id}, type = {type(project_id)}")
-        
-        query = "SELECT * FROM Stages WHERE project_id = ? ORDER BY created_at"
-        print(f"DEBUG SQL query: {query}")
-        
-        try:
-            df = pd.read_sql_query(query, conn, params=(int(project_id),))
-            print(f"DEBUG Found stages: {len(df)} stages")
-            if len(df) > 0:
-                print(f"DEBUG Stage names: {df['stage_name'].tolist()}")
-        except Exception as e:
-            print(f"DEBUG Error: {e}")
-            df = pd.DataFrame()
-        
+        df = pd.read_sql_query("SELECT * FROM Stages WHERE project_id = ? ORDER BY created_at", conn, params=(int(project_id),))
         conn.close()
         return df
     
@@ -217,11 +193,8 @@ class Database:
                 SELECT t.*, u.full_name as responsible_name
                 FROM Tasks t
                 JOIN Users u ON t.user_id = u.user_id
-                WHERE t.stage_id = ? 
-                AND t.user_id = ?
-                ORDER BY 
-                    CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
-                    t.date_end
+                WHERE t.stage_id = ? AND t.user_id = ?
+                ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.date_end
             """
             df = pd.read_sql_query(query, conn, params=(stage_id, current_user_id))
         else:
@@ -230,9 +203,7 @@ class Database:
                 FROM Tasks t
                 JOIN Users u ON t.user_id = u.user_id
                 WHERE t.stage_id = ?
-                ORDER BY 
-                    CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
-                    t.date_end
+                ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.date_end
             """
             df = pd.read_sql_query(query, conn, params=(stage_id,))
         conn.close()
@@ -245,9 +216,7 @@ class Database:
             FROM Tasks t
             JOIN Users u ON t.user_id = u.user_id
             WHERE t.stage_id = ?
-            ORDER BY 
-                CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
-                t.date_end
+            ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.date_end
         """
         df = pd.read_sql_query(query, conn, params=(stage_id,))
         conn.close()
@@ -256,18 +225,13 @@ class Database:
     def get_user_tasks(self, user_id):
         conn = self.get_connection()
         query = """
-            SELECT t.*, 
-                   s.stage_name,
-                   p.project_name,
-                   u.full_name as responsible_name
+            SELECT t.*, s.stage_name, p.project_name, u.full_name as responsible_name
             FROM Tasks t
             JOIN Stages s ON t.stage_id = s.stage_id
             JOIN Projects p ON s.project_id = p.project_id
             JOIN Users u ON t.user_id = u.user_id
             WHERE t.user_id = ?
-            ORDER BY 
-                CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
-                t.date_end
+            ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.date_end
         """
         df = pd.read_sql_query(query, conn, params=(user_id,))
         conn.close()
@@ -287,47 +251,35 @@ class Database:
         cursor.execute('''
             INSERT INTO Tasks (stage_id, user_id, task_name, date_start, date_end, planned_hours)
             VALUES (?, ?, ?, ?, ?, ?)
-        ''', (stage_id, user_id, task_name, date_start, date_end, planned_hours))
+        ''', (stage_id, user_id, task_name, date_start, date_end, float(planned_hours)))
         task_id = cursor.lastrowid
         conn.commit()
         conn.close()
         return task_id
     
-    def update_task_status(self, task_id, status):
+    def complete_task(self, task_id, actual_hours=None, actual_end_date=None):
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        if status == 'completed':
-            cursor.execute('SELECT date_start, date_end FROM Tasks WHERE task_id = ?', (task_id,))
-            task = cursor.fetchone()
-            
-            if task and task['date_start']:
-                date_start = datetime.strptime(task['date_start'], '%Y-%m-%d').date()
-                date_end = datetime.now().date()
-                
-                actual_days = (date_end - date_start).days + 1
-                actual_hours = actual_days * 8
-                
-                cursor.execute('''
-                    UPDATE Tasks 
-                    SET status = ?, actual_hours = ?, actual_end_date = ?
-                    WHERE task_id = ?
-                ''', (status, actual_hours, date_end.strftime('%Y-%m-%d'), task_id))
-            else:
-                cursor.execute('''
-                    UPDATE Tasks 
-                    SET status = ?, actual_end_date = ?
-                    WHERE task_id = ?
-                ''', (status, datetime.now().strftime('%Y-%m-%d'), task_id))
-        else:
-            cursor.execute('''
-                UPDATE Tasks 
-                SET status = ?, actual_hours = 0, actual_end_date = NULL
-                WHERE task_id = ?
-            ''', (status, task_id))
+        if actual_end_date is None:
+            actual_end_date = datetime.now().strftime('%Y-%m-%d')
+        
+        if actual_hours is None:
+            cursor.execute('SELECT planned_hours FROM Tasks WHERE task_id = ?', (task_id,))
+            result = cursor.fetchone()
+            actual_hours = float(result['planned_hours']) if result else 4.0
+        
+        cursor.execute('''
+            UPDATE Tasks 
+            SET status = 'completed', 
+                actual_hours = ?,
+                actual_end_date = ?
+            WHERE task_id = ?
+        ''', (float(actual_hours), actual_end_date, task_id))
         
         conn.commit()
         conn.close()
+        return True
     
     def delete_task(self, task_id):
         conn = self.get_connection()
@@ -335,16 +287,12 @@ class Database:
         cursor.execute("DELETE FROM Tasks WHERE task_id = ?", (task_id,))
         conn.commit()
         conn.close()
+        return True
     
     # Пользователи
     def get_all_users(self):
         conn = self.get_connection()
-        query = """
-            SELECT user_id, login, full_name, is_admin
-            FROM Users
-            ORDER BY full_name
-        """
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query("SELECT user_id, login, full_name, is_admin FROM Users ORDER BY full_name", conn)
         conn.close()
         return df
     
@@ -382,12 +330,7 @@ class Database:
     def get_task_comments(self, task_id):
         conn = self.get_connection()
         query = """
-            SELECT 
-                tc.comment_id,
-                tc.comment_text,
-                tc.created_at,
-                u.full_name as author_name,
-                u.user_id
+            SELECT tc.comment_id, tc.comment_text, tc.created_at, u.full_name as author_name, u.user_id
             FROM Task_Comments tc
             JOIN Users u ON tc.user_id = u.user_id
             WHERE tc.task_id = ?
@@ -400,110 +343,52 @@ class Database:
     def delete_comment(self, comment_id, user_id):
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            DELETE FROM Task_Comments 
-            WHERE comment_id = ? AND user_id = ?
-        ''', (comment_id, user_id))
+        cursor.execute('DELETE FROM Task_Comments WHERE comment_id = ? AND user_id = ?', (comment_id, user_id))
         deleted = cursor.rowcount > 0
         conn.commit()
         conn.close()
         return deleted
     
     # Зарплаты
-    def add_salary(self, user_id, month, salary_amount, hourly_rate=None):
+    def get_all_salaries(self):
+        conn = self.get_connection()
+        query = '''
+            SELECT s.*, u.full_name, u.login
+            FROM Salaries s
+            JOIN Users u ON s.user_id = u.user_id
+            ORDER BY s.month DESC, u.full_name
+        '''
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
+    
+    def add_salary(self, user_id, month, salary_amount):
         conn = self.get_connection()
         cursor = conn.cursor()
-        
-        if hourly_rate is None:
-            hourly_rate = salary_amount / (22 * 8)
-        
         cursor.execute('''
-            INSERT OR REPLACE INTO Salaries (user_id, month, salary_amount, hourly_rate)
-            VALUES (?, ?, ?, ?)
-        ''', (user_id, month, salary_amount, hourly_rate))
-        
+            INSERT OR REPLACE INTO Salaries (user_id, month, salary_amount)
+            VALUES (?, ?, ?)
+        ''', (user_id, month, salary_amount))
         conn.commit()
         conn.close()
     
-    def get_user_salary(self, user_id, month=None):
-        conn = self.get_connection()
-        
-        if month:
-            query = '''
-                SELECT * FROM Salaries 
-                WHERE user_id = ? AND month = ?
-                ORDER BY month DESC
-            '''
-            df = pd.read_sql_query(query, conn, params=(user_id, month))
-        else:
-            query = '''
-                SELECT * FROM Salaries 
-                WHERE user_id = ?
-                ORDER BY month DESC
-            '''
-            df = pd.read_sql_query(query, conn, params=(user_id,))
-        
-        conn.close()
-        return df
-    
-    def get_all_salaries(self, month=None):
-        conn = self.get_connection()
-        
-        if month:
-            query = '''
-                SELECT s.*, u.full_name, u.login
-                FROM Salaries s
-                JOIN Users u ON s.user_id = u.user_id
-                WHERE s.month = ?
-                ORDER BY u.full_name
-            '''
-            df = pd.read_sql_query(query, conn, params=(month,))
-        else:
-            query = '''
-                SELECT s.*, u.full_name, u.login
-                FROM Salaries s
-                JOIN Users u ON s.user_id = u.user_id
-                ORDER BY s.month DESC, u.full_name
-            '''
-            df = pd.read_sql_query(query, conn)
-        
-        conn.close()
-        return df
-    
-    # Аналитика - ИСПРАВЛЕННЫЕ МЕТОДЫ
+    # Аналитика
     def get_stage_analytics(self, stage_id):
         conn = self.get_connection()
-        
         query = '''
-            SELECT 
-                t.*,
-                u.full_name as responsible_name,
-                s.stage_cost,
-                CASE 
-                    WHEN t.status = 'completed' AND t.actual_hours > 0 AND t.planned_hours > 0 THEN
-                        CASE 
-                            WHEN t.actual_hours <= t.planned_hours THEN 'ontime'
-                            ELSE 'delayed'
-                        END
-                    WHEN t.status = 'pending' THEN 'pending'
-                    ELSE 'unknown'
-                END as task_status_type
+            SELECT t.*, u.full_name as responsible_name, s.stage_cost
             FROM Stages s
             LEFT JOIN Tasks t ON s.stage_id = t.stage_id
             LEFT JOIN Users u ON t.user_id = u.user_id
             WHERE s.stage_id = ?
-            ORDER BY 
-                CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,
-                t.date_end
+            ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.date_end
         '''
-        
         df = pd.read_sql_query(query, conn, params=(stage_id,))
         conn.close()
         return df
     
     def get_project_analytics(self, project_id):
         conn = self.get_connection()
-        
         query = '''
             SELECT 
                 s.stage_id,
@@ -512,19 +397,13 @@ class Database:
                 COUNT(t.task_id) as task_count,
                 SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
                 COALESCE(SUM(t.planned_hours), 0) as total_planned_hours,
-                COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
-                CASE 
-                    WHEN SUM(t.actual_hours) > 0 AND SUM(t.planned_hours) > 0 
-                    THEN SUM(t.actual_hours) / SUM(t.planned_hours)
-                    ELSE NULL 
-                END as avg_efficiency
+                COALESCE(SUM(t.actual_hours), 0) as total_actual_hours
             FROM Stages s
             LEFT JOIN Tasks t ON s.stage_id = t.stage_id
             WHERE s.project_id = ?
             GROUP BY s.stage_id, s.stage_name, s.stage_cost
             ORDER BY s.created_at
         '''
-        
         df = pd.read_sql_query(query, conn, params=(project_id,))
         conn.close()
         return df
@@ -532,21 +411,18 @@ class Database:
     def get_employee_performance(self, start_date=None, end_date=None):
         conn = self.get_connection()
         
-        where_clause = ""
+        where_clause = "WHERE t.actual_end_date IS NOT NULL"
         params = []
         
         if start_date and end_date:
-            where_clause = "WHERE t.actual_end_date BETWEEN ? AND ?"
+            where_clause += " AND t.actual_end_date BETWEEN ? AND ?"
             params = [start_date, end_date]
         elif start_date:
-            where_clause = "WHERE t.actual_end_date >= ?"
+            where_clause += " AND t.actual_end_date >= ?"
             params = [start_date]
         elif end_date:
-            where_clause = "WHERE t.actual_end_date <= ?"
+            where_clause += " AND t.actual_end_date <= ?"
             params = [end_date]
-        else:
-            # Если даты не указаны, берем последние 30 дней
-            where_clause = "WHERE t.actual_end_date >= date('now', '-30 days')"
         
         query = f'''
             SELECT 
@@ -559,19 +435,50 @@ class Database:
                 COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
                 CASE 
                     WHEN SUM(t.actual_hours) > 0 AND SUM(t.planned_hours) > 0 
-                    THEN SUM(t.actual_hours) / SUM(t.planned_hours)
-                    ELSE NULL 
-                END as avg_efficiency,
-                COUNT(CASE WHEN t.status = 'completed' AND t.actual_hours <= t.planned_hours THEN 1 END) as ontime_tasks,
-                COUNT(CASE WHEN t.status = 'completed' AND t.actual_hours > t.planned_hours THEN 1 END) as delayed_tasks
+                    THEN (SUM(t.planned_hours) / SUM(t.actual_hours)) * 100
+                    ELSE 0 
+                END as efficiency_percent
             FROM Users u
             LEFT JOIN Tasks t ON u.user_id = t.user_id
             {where_clause}
             GROUP BY u.user_id, u.full_name, u.login
-            HAVING total_tasks > 0
+            HAVING completed_tasks > 0
             ORDER BY total_actual_hours DESC
         '''
         
         df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        return df
+    
+    def get_project_deviations(self, project_id):
+        conn = self.get_connection()
+        query = '''
+            SELECT 
+                t.task_id,
+                t.task_name,
+                t.date_start,
+                t.date_end as planned_end_date,
+                t.actual_end_date,
+                t.planned_hours,
+                t.actual_hours,
+                u.full_name as responsible_name,
+                s.stage_name,
+                p.project_name,
+                CASE 
+                    WHEN t.actual_end_date IS NOT NULL THEN 
+                        CASE 
+                            WHEN t.actual_end_date <= t.date_end THEN 'ontime'
+                            ELSE 'delayed'
+                        END
+                    ELSE 'pending'
+                END as deviation_status
+            FROM Tasks t
+            JOIN Stages s ON t.stage_id = s.stage_id
+            JOIN Projects p ON s.project_id = p.project_id
+            JOIN Users u ON t.user_id = u.user_id
+            WHERE p.project_id = ?
+            ORDER BY t.date_end
+        '''
+        df = pd.read_sql_query(query, conn, params=(project_id,))
         conn.close()
         return df

@@ -25,8 +25,6 @@ with st.form("create_project_form", clear_on_submit=True):
         else:
             st.error("Введите название проекта")
 
-st.markdown("---")
-
 st.subheader("Управление проектами")
 
 projects_df = db.get_all_projects()
@@ -48,8 +46,6 @@ else:
                     st.success("Проект удален")
                     st.rerun()
             
-            st.markdown("---")
-            
             st.write("**Добавить этап**")
             with st.form(f"create_stage_form_{project['project_id']}", clear_on_submit=True):
                 stage_name = st.text_input("Название этапа", key=f"stage_name_{project['project_id']}")
@@ -61,8 +57,6 @@ else:
                         st.rerun()
                     else:
                         st.error("Введите название этапа")
-            
-            st.markdown("---")
             
             stages_df = db.get_project_stages(project['project_id'])
             
